@@ -8,14 +8,14 @@ html
     p This page contains all messages.
     p You are currently in a room: #{currentRoom}
     form(id="changeRoom")
-        input(type="text", placeholder="Room number", name="number")
-        button(type="submit") Join
+        input(type="text", placeholder="Room number", id="join-number", name="join-number")
+        button(type="submit", id="join-number-button") Join
     h2 Chat:
-    ul
+    ul#chat-list.chat-list
       each item in chatArray
         li= item
       form(id="chatForm")
-        input(type="text", placeholder="Send message", name="message")
-        button(type="submit") Send
+        input(type="text", placeholder="Send message", id="chat-message", name="chat-message")
+        button(type="submit", id="chat-message-button") Send
     script(src="/socket.io/socket.io.js")
     script(src='javascripts/main.js')
