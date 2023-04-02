@@ -1,0 +1,21 @@
+doctype html
+html
+  head
+    title= "Express"
+    link(rel='stylesheet', href='/stylesheets/style.css')
+  body
+    h1 Chat main page.
+    p This page contains all messages.
+    p You are currently in a room: #{currentRoom}
+    form(id="changeRoom")
+        input(type="text", placeholder="Room number", name="number")
+        button(type="submit") Join
+    h2 Chat:
+    ul
+      each item in chatArray
+        li= item
+      form(id="chatForm")
+        input(type="text", placeholder="Send message", name="message")
+        button(type="submit") Send
+    script(src="/socket.io/socket.io.js")
+    script(src='javascripts/main.js')

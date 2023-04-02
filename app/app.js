@@ -1,26 +1,38 @@
 var createError = require("http-errors");
 var express = require("express");
-var cookieParser = require("cookie-parser");
-var bodyParser = require("body-parser");
 var path = require("path");
+var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 
 var indexRouter = require("./routes/index");
 
-var livereload = require("livereload");
-var connectLivereload = require("connect-livereload");
+var app = express();
+var io = require("./io");
 
-const liveReloadServer = livereload.createServer();
-liveReloadServer.server.once("connection", () => {
-  setTimeout(() => {
-    liveReloadServer.refresh("/");
-  }, 50);
+let connectedSockets = new Set();
+
+io.on("connection", function (socket) {
+  console.log("An user has connected.");
+  connectedSockets.add(socket);
+  console.log("Current connected sockets: " + connectedSockets.size.toString());
+
+  socket.on("disconnect", () => {
+    console.log("Am user has disconnected.");
+    connectedSockets.delete(socket);
+    console.log(
+      "Current connected sockets: " + connectedSockets.size.toString()
+    );
+  });
+
+  socket.emit("chat-message", "Welcome to the chat!");
 });
 
-var app = express();
+io.on("error", function (socket) {
+  console.log("error");
+});
 
-app.use(connectLivereload());
-
+global.chatArray = ["MOTD: Welcome to the chat!"];
+global.currentRoom = 12;
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "pug");
