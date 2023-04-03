@@ -4,18 +4,23 @@ html
     title= "Express"
     link(rel='stylesheet', href='/stylesheets/style.css')
   body
-    h1 Chat main page.
-    p This page contains all messages.
-    p You are currently in a room: #{currentRoom}
-    form(id="changeRoom")
-        input(type="text", placeholder="Room number", name="number")
-        button(type="submit") Join
-    h2 Chat:
-    ul
-      each item in chatArray
-        li= item
-      form(id="chatForm")
-        input(type="text", placeholder="Send message", name="message")
-        button(type="submit") Send
+    div#chat-container.chat-container 
+      h1#room-indicator Welcome to room: #{defaultRoom}
+      
+      h2#people-indicator You are currently chatting with 0 other people.
+      ul#chat-list.chat-list
+        each item in chatArray
+          li= item
+
+      div#interaction-forms.interaction-forms          
+        form(id="changeRoom")
+          input(type="text", class='join-number-input', placeholder="Room", id="join-number", name="join-number")
+          button(type="submit", id="join-number-button") Join
+
+        form(id="chatForm")
+          input(type="text", class='chat-message-input', placeholder="Send message", id="chat-message", name="chat-message")
+          button(type="submit", id="chat-message-button") Send
+      
+      
     script(src="/socket.io/socket.io.js")
     script(src='javascripts/main.js')

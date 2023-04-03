@@ -7,32 +7,150 @@ var logger = require("morgan");
 var indexRouter = require("./routes/index");
 
 var app = express();
+
 var io = require("./io");
+var chatMap = new Map();
+var connectedSockets = new Set();
 
-let connectedSockets = new Set();
+// Utility functions
+function getCurrentRoom(socket) {
+  for (let room of chatMap.values()) {
+    if (room.users.has(socket)) {
+      return room;
+    }
+  }
+}
 
-io.on("connection", function (socket) {
-  console.log("An user has connected.");
+function createRoom(roomId) {
+  chatMap.set(roomId, { id: roomId, users: new Set(), messages: [] });
+}
+
+function checkAndDeleteRoom(room) {
+  if (room.users.size === 0) {
+    chatMap.delete(room.id);
+  }
+}
+
+function getSocketIds(socketSet) {
+  return Array.from(socketSet).map((socket) => socket.id);
+}
+
+// Creation and removal of users from chatMap
+function createUserDataInChatMap(socket, roomId) {
+  let room = chatMap.get(roomId);
+
+  if (!room) {
+    createRoom(roomId);
+    room = chatMap.get(roomId);
+  }
+
+  if (!room.users.has(socket)) {
+    room.users.add(socket);
+    socket.join(roomId);
+    io.to(roomId).emit("update-users", {
+      id: roomId,
+      users: getSocketIds(room.users),
+    });
+
+    const now = new Date();
+    const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+    room.messages.push(
+      `[System]${timeString} User ${socket.id} has joined the room`
+    );
+    io.to(roomId).emit("chat-message", room.messages);
+  }
+}
+
+function removeUserDataFromChatMap(socket) {
+  for (let room of chatMap.values()) {
+    if (room.users.has(socket)) {
+      room.users.delete(socket);
+      io.to(room.id).emit("update-users", {
+        id: room.id,
+        users: getSocketIds(room.users),
+      });
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+      room.messages.push(
+        `[System]${timeString} User ${socket.id} has left the room`
+      );
+      io.to(room.id).emit("chat-message", room.messages);
+
+      socket.leave(room.id);
+      checkAndDeleteRoom(room);
+      break;
+    }
+  }
+}
+
+//event handlers and default room
+global.defaultRoom = "default";
+
+function addUserToDefaultRoom(socket) {
+  createUserDataInChatMap(socket, defaultRoom);
+}
+
+function handleUserJoiningRoom(socket, roomId) {
+  removeUserDataFromChatMap(socket);
+  createUserDataInChatMap(socket, roomId);
+}
+
+function handleUserSendingMessage(socket, message) {
+  const currentRoom = getCurrentRoom(socket);
+  if (currentRoom) {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+    currentRoom.messages.push(`[${socket.id}]${timeString} ${message}`);
+    console.log(`[${socket.id}]: ${message}`);
+    console.log(" Current room messages: " + currentRoom.messages);
+    io.to(currentRoom.id).emit("chat-message", currentRoom.messages);
+  }
+}
+
+function handleUserDisconnecting(socket) {
+  removeUserDataFromChatMap(socket);
+}
+
+function handleNewSocketConnection(socket) {
   connectedSockets.add(socket);
-  console.log("Current connected sockets: " + connectedSockets.size.toString());
+  addUserToDefaultRoom(socket);
+
+  console.log(
+    "A user has connected. Current connected sockets: " +
+      connectedSockets.size.toString()
+  );
 
   socket.on("disconnect", () => {
-    console.log("Am user has disconnected.");
     connectedSockets.delete(socket);
     console.log(
-      "Current connected sockets: " + connectedSockets.size.toString()
+      "A user has disconnected. Current connected sockets: " +
+        connectedSockets.size.toString()
     );
+    handleUserDisconnecting(socket);
   });
 
-  socket.emit("chat-message", "Welcome to the chat!");
+  socket.on("join-room", (roomId) => {
+    handleUserJoiningRoom(socket, roomId);
+  });
+
+  socket.on("chat-message", (message) => {
+    handleUserSendingMessage(socket, message);
+  });
+
+  console.log(connectedSockets.size);
+  console.log(chatMap);
+}
+
+io.on("connection", handleNewSocketConnection);
+
+io.on("error", (socket) => {
+  console.error("error");
 });
 
-io.on("error", function (socket) {
-  console.log("error");
-});
-
-global.chatArray = ["MOTD: Welcome to the chat!"];
-global.currentRoom = 12;
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "pug");
