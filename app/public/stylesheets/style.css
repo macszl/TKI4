@@ -1,8 +1,76 @@
-body {
-  padding: 50px;
-  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 
+body {
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+  background-color: #eef1ed;
+}
+
+.chat-container {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.user-list {
+  width: 100%;
+  height: 160px;
+  overflow: auto;
+}
+
+.interaction-forms {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+#chatForm {
+  flex-grow: 1;
+  width: auto;
+  display: flex;
+}
+
+.chat-message-input {
+  flex-grow: 1;
+  height: 2rem;
+}
+
+#chat-message-button {
+  height: 2rem;
+}
+
+.join-number-input {
+  width: 3rem;
+  height: 2rem;
+}
+
+#join-number-button {
+  height: 2rem;
+}
+
+.chat-list {
+  width: 100%;
+  flex-grow: 1;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+
+  background-color: #fafbfa;
+  border-radius: 20px;
+}
 a {
   color: #00b7ff;
 }
@@ -16,4 +84,11 @@ ol {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+
+li {
+  margin-bottom: 1rem;
+}
+.system-text {
+  color: #0edb59;
 }

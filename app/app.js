@@ -7,156 +7,22 @@ var logger = require("morgan");
 var indexRouter = require("./routes/index");
 
 var app = express();
+
 var io = require("./io");
+var chatMap = new Map();
+var connectedSockets = new Set();
 
-let connectedSockets = new Set();
-let chatMap = new Map();
-
-function handleConnections(socket) {
-  userConnection(socket);
-
-  socket.on("disconnect", () => userDisconnection(socket));
-  socket.on("join-room", (roomId) => joinRoom(roomId, socket));
-  socket.on("leave-room", () => leaveRoom(socket));
-  socket.on("chat-message", (message) => sendMessage(socket, message));
-}
-
-function joinRoom(roomId, socket) {
-  // Remove the user from all rooms
-  removeUserFromRooms(socket);
-
-  // Add the user to the specified room
-  addUserToRoom(roomId, socket);
-
-  socket.join(roomId);
-  // Emit a message to the room that the user has joined
-  socket
-    .to(roomId)
-    .emit("chat-message", `User ${socket.id} has joined the room`);
-
-  // Emit the updated users to the room
-  const room = chatMap.get(roomId);
-  updateRoomUsers(room);
-}
-
-function leaveRoom(socket) {
-  // Find the room that the user is in
-  let currentRoom;
+// Utility functions
+function getCurrentRoom(socket) {
   for (let room of chatMap.values()) {
     if (room.users.has(socket)) {
-      currentRoom = room;
-      break;
+      return room;
     }
   }
-
-  // If the user is in a room, remove them
-  if (currentRoom) {
-    // Remove the user from the room
-    currentRoom.users.delete(socket);
-
-    socket.leave(currentRoom.id);
-    // Emit a message to the room that the user has left
-    socket
-      .to(currentRoom.id)
-      .emit("chat-message", `User ${socket.id} has left the room`);
-
-    // Emit the updated users to the room
-    updateRoomUsers(currentRoom);
-
-    // Check if the room is empty and delete it if it is
-    checkAndDeleteRoom(currentRoom);
-  }
-}
-
-function userConnection(socket) {
-  const defaultId = "12";
-  console.log("An user has connected.");
-  // Add the user to the connected sockets
-  connectedSockets.add(socket);
-  // Add the user to the default room
-  joinRoom(defaultId, socket);
-  console.log("Current connected sockets: " + connectedSockets.size.toString());
-
-  socket.to(defaultId).emit("chat-message", "Welcome to the chat!");
-}
-
-function userDisconnection(socket) {
-  console.log("An user has disconnected.");
-  // Remove the user from the connected sockets
-  connectedSockets.delete(socket);
-  // Remove the user from all rooms
-  removeUserFromRooms(socket);
-  leaveRoom(socket);
-  console.log("Current connected sockets: " + connectedSockets.size.toString());
 }
 
 function createRoom(roomId) {
-  // Create a new room
-  const room = {
-    id: roomId,
-    users: new Set(),
-    messages: [],
-  };
-  // Add the room to the chatMap
-  chatMap.set(roomId, room);
-}
-
-function addUserToRoom(roomId, socketId) {
-  // Get the room from the chatMap
-  let room = chatMap.get(roomId);
-
-  // If the room doesn't exist, create it
-  if (!room) {
-    createRoom(roomId);
-    room = chatMap.get(roomId);
-  }
-  // Check if the user is already in the room
-  const userExists = room.users.has(socketId);
-  // If the user doesn't exist in the room, add them
-  if (!userExists) {
-    room.users.add(socketId);
-  }
-
-  // Emit the updated users to the room
-  updateRoomUsers(room);
-}
-
-function sendMessage(socket, message) {
-  // Find the room that the user is in
-  let currentRoom;
-  for (let room of chatMap.values()) {
-    if (room.users.has(socket)) {
-      currentRoom = room;
-      break;
-    }
-  }
-
-  // If the user is in a room, broadcast the message
-  if (currentRoom) {
-    console.log(
-      "Room found, sending message: " + message + " to room: " + currentRoom.id
-    );
-    // Add the message to the room's message history
-    currentRoom.messages.push({ sender: socket.id, message });
-
-    // Emit the message to all users in the room
-    io.to(currentRoom.id).emit("chat-message", `[${socket.id}]: ${message}`);
-  }
-}
-
-function removeUserFromRooms(socket) {
-  // Iterate over all chat rooms and remove the user from the room
-  for (let room of chatMap.values()) {
-    if (room.users.has(socket)) {
-      // Remove the user from the room
-      room.users.delete(socket);
-      // Emit the updated users to the room
-      updateRoomUsers(room);
-      // Check if the room is empty and delete it if it is
-      checkAndDeleteRoom(room);
-      break;
-    }
-  }
+  chatMap.set(roomId, { id: roomId, users: new Set(), messages: [] });
 }
 
 function checkAndDeleteRoom(room) {
@@ -165,17 +31,124 @@ function checkAndDeleteRoom(room) {
   }
 }
 
-function updateRoomUsers(room) {
-  io.to(room.id).emit("update-users", {
-    id: room.id,
-    users: Array.from(room.users).map((socket) => socket.id),
-  });
+function getSocketIds(socketSet) {
+  return Array.from(socketSet).map((socket) => socket.id);
 }
 
-io.on("connection", handleConnections);
+// Creation and removal of users from chatMap
+function createUserDataInChatMap(socket, roomId) {
+  let room = chatMap.get(roomId);
 
-io.on("error", function (socket) {
-  console.log("error");
+  if (!room) {
+    createRoom(roomId);
+    room = chatMap.get(roomId);
+  }
+
+  if (!room.users.has(socket)) {
+    room.users.add(socket);
+    socket.join(roomId);
+    io.to(roomId).emit("update-users", {
+      id: roomId,
+      users: getSocketIds(room.users),
+    });
+
+    const now = new Date();
+    const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+    room.messages.push(
+      `[System]${timeString} User ${socket.id} has joined the room`
+    );
+    io.to(roomId).emit("chat-message", room.messages);
+  }
+}
+
+function removeUserDataFromChatMap(socket) {
+  for (let room of chatMap.values()) {
+    if (room.users.has(socket)) {
+      room.users.delete(socket);
+      io.to(room.id).emit("update-users", {
+        id: room.id,
+        users: getSocketIds(room.users),
+      });
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+      room.messages.push(
+        `[System]${timeString} User ${socket.id} has left the room`
+      );
+      io.to(room.id).emit("chat-message", room.messages);
+
+      socket.leave(room.id);
+      checkAndDeleteRoom(room);
+      break;
+    }
+  }
+}
+
+//event handlers and default room
+global.defaultRoom = "default";
+
+function addUserToDefaultRoom(socket) {
+  createUserDataInChatMap(socket, defaultRoom);
+}
+
+function handleUserJoiningRoom(socket, roomId) {
+  removeUserDataFromChatMap(socket);
+  createUserDataInChatMap(socket, roomId);
+}
+
+function handleUserSendingMessage(socket, message) {
+  const currentRoom = getCurrentRoom(socket);
+  if (currentRoom) {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString("en-US", { hour12: false });
+
+    currentRoom.messages.push(`[${socket.id}]${timeString} ${message}`);
+    console.log(`[${socket.id}]: ${message}`);
+    console.log(" Current room messages: " + currentRoom.messages);
+    io.to(currentRoom.id).emit("chat-message", currentRoom.messages);
+  }
+}
+
+function handleUserDisconnecting(socket) {
+  removeUserDataFromChatMap(socket);
+}
+
+function handleNewSocketConnection(socket) {
+  connectedSockets.add(socket);
+  addUserToDefaultRoom(socket);
+
+  console.log(
+    "A user has connected. Current connected sockets: " +
+      connectedSockets.size.toString()
+  );
+
+  socket.on("disconnect", () => {
+    connectedSockets.delete(socket);
+    console.log(
+      "A user has disconnected. Current connected sockets: " +
+        connectedSockets.size.toString()
+    );
+    handleUserDisconnecting(socket);
+  });
+
+  socket.on("join-room", (roomId) => {
+    handleUserJoiningRoom(socket, roomId);
+  });
+
+  socket.on("chat-message", (message) => {
+    handleUserSendingMessage(socket, message);
+  });
+
+  console.log(connectedSockets.size);
+  console.log(chatMap);
+}
+
+io.on("connection", handleNewSocketConnection);
+
+io.on("error", (socket) => {
+  console.error("error");
 });
 
 // view engine setup
